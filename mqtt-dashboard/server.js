@@ -9,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // === Broker en tu LAN ===
-const MQTT_URL = process.env.MQTT_URL || "mqtt://10.7.135.36:1883";
+//const MQTT_URL = process.env.MQTT_URL || "mqtt://10.7.135.36:1883";
+const MQTT_URL = process.env.MQTT_URL || "mqtt://mqtt-broker:1883"; // Usamos el nombre del servicio "mqtt-broker"
 const MQTT_USER = process.env.MQTT_USER || "";
 const MQTT_PASS = process.env.MQTT_PASS || "";
 const MQTT_TOPIC = process.env.MQTT_TOPIC || "esp32/temperatura";

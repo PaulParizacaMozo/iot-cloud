@@ -1,33 +1,34 @@
-version: "3.9"  # Define la versión de Docker Compose
+version: "3.9"
 
 services:
-  # Servicio MQTT Broker (Mosquitto)
   mqtt-broker:
     image: eclipse-mosquitto:latest
     container_name: mqtt-broker
     restart: always
     ports:
-      - "1883:1883"  # MQTT (puerto 1883)
+      - "1883:1883"  # Exponemos puerto MQTT
     volumes:
-      - ./mqtt-broker/mosquitto:/mosquitto  # Montar el volumen para persistencia
+      - ./mqtt-broker/mosquitto:/mosquitto  # Montamos volumen de persistencia
     networks:
       - iot-network
 
-  # Servicio del servidor Node.js (mqtt-dashboard)
   mqtt-dashboard:
     build:
-      context: ./mqtt-dashboard  # Directorio donde está el Dockerfile de Node.js
+      context: ./mqtt-dashboard
     container_name: mqtt-dashboard
     restart: always
     ports:
-      - "3000:3000"  # Puerto para el dashboard (web)
+      - "3000:3000"  # Exponemos puerto del dashboard
     depends_on:
-      - mqtt-broker  # Espera a que el broker esté listo
+      - mqtt-broker
     networks:
       - iot-network
     environment:
-      - MQTT_URL=mqtt://mqtt-broker:1883  # URL del broker MQTT dentro de la red interna
+      - MQTT_URL=mqtt://mqtt-broker:1883  # Conectamos usando el nombre del servicio MQTT
+      - NODE_ENV=production  # Establecemos el entorno a producción
+    # Accede al contenedor mqtt-broker por el nombre del servicio "mqtt-broker"
 
 networks:
   iot-network:
-    driver: bridge  # Red interna para que los contenedores puedan comunicarse
+    driver: bridge  # Usamos red puente para que los contenedores se comuniquen entre sí
+
