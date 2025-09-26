@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>ESP32 Dashboard (MQTT)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Socket.IO (servida por tu server) -->
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root { --card:#fff; --muted:#666; --line:#e5e7eb; --bg:#fafafa; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; background: var(--bg); color: #111; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 .25rem 0; }
+    .sub { color: #555; margin-top: 0; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2ff; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:10px 0 20px; }
+    .stat { border:1px dashed var(--line); border-radius:12px; padding:12px; background:#fcfcfc; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .cards { display:grid; grid-template-columns:1fr; gap:16px; }
+    @media (min-width: 980px){ .cards { grid-template-columns: 2fr 1fr; } }
+    .card { border:1px solid var(--line); border-radius:14px; padding:16px; background: var(--card); box-shadow:0 1px 4px rgba(0,0,0,.04); }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:8px; border-bottom:1px solid #eee; text-align:left; }
+    th { background:#f9fafb; position:sticky; top:0; z-index:1; }
+    .full { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ESP32 Dashboard</h1>
+    <p class="sub">
+      Broker: <span class="pill">mqtt://10.7.135.36:1883</span> &nbsp;|&nbsp;
+      Tópico: <span class="pill" id="topicLabel">esp32/temperatura</span>
+    </p>
+
+    <div class="grid2">
+      <div class="stat">
+        <div class="muted">Última humedad (%)</div>
+        <div id="lastHum" style="font-size:28px;font-weight:700;">—</div>
+      </div>
+      <div class="stat">
+        <div class="muted">Última temperatura (°C)</div>
+        <div id="lastTemp" style="font-size:28px;font-weight:700;">—</div>
+      </div>
+    </div>
+
+    <div class="cards">
+      <!-- 🟦 PRIMERO: HUMEDAD -->
+      <div class="card">
+        <h3 style="margin:0 0 8px 0;">Humedad (%)</h3>
+        <canvas id="chartHum" height="130"></canvas>
+      </div>
+
+      <!-- Tabla al lado -->
+      <div class="card" style="max-height:420px;overflow:auto;">
+        <table id="table">
+          <thead>
+            <tr><th>Fecha/Hora</th><th>Temp (°C)</th><th>Hum (%)</th></tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- 🟥 DESPUÉS: TEMPERATURA -->
+      <div class="card full">
+        <h3 style="margin:0 0 8px 0;">Temperatura (°C)</h3>
+        <canvas id="chartTemp" height="130"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== Config ======
+    const MAX_POINTS = 200;
+    const TOPIC = "esp32/temperatura";
+    document.getElementById("topicLabel").textContent = TOPIC;
+
+    // ====== Estado ======
+    const labels = [];     // timestamps (como texto)
+    const temps = [];      // temperatura
+    const hums  = [];      // humedad
+
+    const fmt = ts => {
+      // Maneja números (epoch ms) y strings
+      const d = (typeof ts === "number") ? new Date(ts) : new Date(String(ts));
+      return isNaN(d) ? String(ts) : d.toLocaleString("es-PE",{hour12:false});
+    };
+
+    // ====== Charts ======
+    const humCtx = document.getElementById("chartHum").getContext("2d");
+    const tempCtx = document.getElementById("chartTemp").getContext("2d");
+
+    const chartHum = new Chart(humCtx, {
+      type: "line",
+      data: { labels, datasets: [{ label: "Humedad (%)", data: hums, tension: .25, pointRadius: 0 }] },
+      options: {
+        responsive: true, animation: false,
+        scales: {
+          x: { ticks: { maxRotation:0, autoSkip:true, maxTicksLimit:10 } },
+          y: { suggestedMin: 0, suggestedMax: 100, title: { display:true, text:"%" } }
+        }
+      }
+    });
+
+    const chartTemp = new Chart(tempCtx, {
+      type: "line",
+      data: { labels, datasets: [{ label: "Temperatura (°C)", data: temps, tension: .25, pointRadius: 0 }] },
+      options: {
+        responsive: true, animation: false,
+        scales: {
+          x: { ticks: { maxRotation:0, autoSkip:true, maxTicksLimit:10 } },
+          y: { title: { display:true, text:"°C" } }
+        }
+      }
+    });
+
+    // ====== Render ======
+    function addRow(r){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmt(r.ts)}</td><td>${r.temp ?? "—"}</td><td>${r.hum ?? "—"}</td>`;
+      const tbody = document.getElementById("tbody");
+      tbody.appendChild(tr);
+      while (tbody.rows.length > MAX_POINTS) tbody.deleteRow(0);
+    }
+
+    function addPoint(r){
+      labels.push(fmt(r.ts));
+      temps.push((typeof r.temp === "number") ? r.temp : null);
+      hums.push((typeof r.hum === "number") ? r.hum : null);
+
+      if (labels.length > MAX_POINTS) { labels.shift(); temps.shift(); hums.shift(); }
+
+      chartHum.update("none");
+      chartTemp.update("none");
+
+      if (typeof r.hum === "number") document.getElementById("lastHum").textContent = r.hum.toFixed(2);
+      if (typeof r.temp === "number") document.getElementById("lastTemp").textContent = r.temp.toFixed(2);
+    }
+
+    // ====== Carga histórico ======
+    fetch("/api/readings")
+      .then(r => r.json())
+      .then(arr => {
+        console.log("[INIT] Lecturas históricas:", arr.length);
+        arr.forEach(r => { addPoint(r); addRow(r); });
+      })
+      .catch(err => console.error("[INIT] Error fetching /api/readings:", err));
+
+    // ====== Tiempo real ======
+    const socket = io();
+    socket.on("connect", () => console.log("[Socket.IO] conectado"));
+    socket.on("disconnect", () => console.warn("[Socket.IO] desconectado"));
+    socket.on("reading", r => {
+      console.log("[MQTT->Web] reading:", r);
+      // tolerante: si tu payload viniera con claves distintas, normalízalas
+      const norm = {
+        ts:  r.ts ?? Date.now(),
+        temp: (r.temp !== undefined) ? Number(r.temp) : (r.temperature ?? null),
+        hum:  (r.hum  !== undefined) ? Number(r.hum)  : (r.humidity ?? null)
+      };
+      addPoint(norm);
+      addRow(norm);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "mqtt-dashboard-esp32",
+  "version": "1.0.0",
+  "description": "Servidor Node.js + MQTT + vista simple para ESP32",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mqtt": "^5.3.5",
+    "socket.io": "^4.7.5"
+  }
+}

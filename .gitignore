@@ -1,0 +1,25 @@
+# Node.js
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Docker
+*.log
+*.pid
+docker-compose.override.yml
+
+# Archivos de configuración del sistema
+*.swp
+*.swo
+
+# Archivos específicos de IDEs
+.vscode/
+.idea/
+
+# Archivos específicos de OS
+.DS_Store
+Thumbs.db
+
+# Archivos generados por el editor
+*.bak
+*.tmp
